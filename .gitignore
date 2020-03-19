@@ -21,7 +21,6 @@ build/
 dist/
 *.egg-info/
 colors
-setup.py
 
 
 # IDE
@@ -31,5 +30,3 @@ setup.py
 .ipynb_checkpoints
 #docs/source/_static/
 #docs/source/_templates/
-docs/source/_static/
-docs/source/_templates/

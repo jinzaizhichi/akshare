@@ -5,17 +5,19 @@
 [![Downloads](https://pepy.tech/badge/akshare)](https://pepy.tech/project/akshare)
 [![Documentation Status](https://readthedocs.org/projects/akshare/badge/?version=latest)](https://akshare.readthedocs.io/zh_CN/latest/?badge=latest)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Data: akshare](https://img.shields.io/badge/data-akshare-000150.svg)](https://github.com/jindaxiang/akshare)
-[![Build Status](https://travis-ci.com/jindaxiang/akshare.svg?branch=master)](https://travis-ci.com/jindaxiang/akshare)
+[![akshare](https://img.shields.io/badge/Data%20Science-AkShare-green)](https://github.com/jindaxiang/akshare)
+[![Actions Status](https://github.com/jindaxiang/akshare/workflows/build/badge.svg)](https://github.com/jindaxiang/akshare/actions)
 [![MIT Licence](https://camo.githubusercontent.com/14a9abb7e83098f2949f26d2190e04fb1bd52c06/68747470733a2f2f626c61636b2e72656164746865646f63732e696f2f656e2f737461626c652f5f7374617469632f6c6963656e73652e737667)](https://github.com/jindaxiang/akshare/blob/master/LICENSE)
+[![](https://img.shields.io/github/forks/jindaxiang/akshare)](https://github.com/jindaxiang/akshare)
+[![](https://img.shields.io/github/stars/jindaxiang/akshare)](https://github.com/jindaxiang/akshare)
+[![](https://img.shields.io/github/issues/jindaxiang/akshare)](https://github.com/jindaxiang/akshare)
+[![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
 # ![](https://github.com/jindaxiang/akshare/blob/master/example/images/akshare_home.png)
 
 ## Overview
 
-**Currently [AkShare](https://github.com/jindaxiang/akshare) support Python >= 3.6**
-
-[AkShare](https://github.com/jindaxiang/akshare) is an, written with `Python-3.7.5`, aims to make fetch financial data as convenient as possible.
+[AkShare](https://github.com/jindaxiang/akshare) support Python 3.6+, aims to make fetch financial data as convenient as possible.
 
 **Write less, get more!**
 
@@ -26,8 +28,51 @@
 
 ## Installation
 
+### General
+
+```
+pip install akshare --ugrade
+```
+
+### China
+
 ```cmd
-pip install akshare
+pip install akshare -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host=mirrors.aliyun.com  --upgrade
+```
+
+### Docker
+
+```
+docker pull registry.cn-hangzhou.aliyuncs.com/akshare/akdocker
+```
+
+## Usage
+
+Code
+
+```python
+import akshare as ak
+hist_df = ak.stock_us_daily(symbol="AMZN")  # Get U.S. stock Amazon's price info
+print(hist_df)
+```
+
+Output
+
+```
+               open     high      low    close   volume
+date                                                   
+1997-05-15    29.25    30.00    23.13    23.50  6013000
+1997-05-16    23.63    23.75    20.50    20.75  1225000
+1997-05-19    21.13    21.25    19.50    20.50   508900
+1997-05-20    20.75    21.00    19.63    19.63   455600
+1997-05-21    19.63    19.75    16.50    17.13  1571100
+             ...      ...      ...      ...      ...
+2020-02-24  2003.18  2039.30  1987.97  2009.29  6546997
+2020-02-25  2026.42  2034.60  1958.42  1972.74  6219094
+2020-02-26  1970.28  2014.67  1960.45  1979.59  5240402
+2020-02-27  1934.38  1975.00  1882.76  1884.30  8143993
+2020-02-28  1814.63  1889.76  1811.13  1883.75  9493797
+[5731 rows x 5 columns]
 ```
 
 ## Communication
@@ -51,7 +96,7 @@ Application to add **AkShare-官方** QQ group and talk about [AkShare](https://
 - **Easy**: Just one line to fetch the data;
 - **Fast**: Just copy and paste;
 - **Extensible**: Easy to customize your own code;
-- **Powerful**: Python ecosystem;
+- **Powerful**: Python ecosystem.
 
 ## Tutorials
 
@@ -89,19 +134,19 @@ Application to add **AkShare-官方** QQ group and talk about [AkShare](https://
 Use the badge in your project's README.md:
 
 ```markdown
-[![Data: akshare](https://img.shields.io/badge/data-akshare-000345.svg)](https://github.com/jindaxiang/akshare)
+[![Data: akshare](https://img.shields.io/badge/AkShare-Data%20Science-brightgreen)](https://github.com/jindaxiang/akshare)
 ```
 
 Using the badge in README.rst:
 
 ```
-.. image:: https://img.shields.io/badge/data-akshare-000150.svg
+.. image:: https://img.shields.io/badge/Data%20Science-AkShare-green
     :target: https://github.com/jindaxiang/akshare
 ```
 
 Looks like this:
 
-[![Data: akshare](https://img.shields.io/badge/data-akshare-000150.svg)](https://github.com/jindaxiang/akshare)
+[![Data: akshare](https://img.shields.io/badge/Data%20Science-AkShare-green)](https://github.com/jindaxiang/akshare)
 
 ## Citation
 
@@ -124,7 +169,7 @@ Special thanks [FuShare](https://github.com/LowinLi/fushare) for the opportunity
 
 Special thanks [TuShare](https://github.com/waditu/tushare) for the opportunity of learning from the project;
 
-Thanks for the data provided by [生意社网站](http://www.100ppi.com/)
+Thanks for the data provided by [生意社网站](http://www.100ppi.com/);
 
 Thanks for the data provided by [奇货可查网站](https://qhkch.com/);
 
@@ -218,6 +263,10 @@ Thanks for the data provided by [商业特许经营信息管理网站](http://tx
 
 Thanks for the data provided by [慈善中国网站](http://cishan.chinanpo.gov.cn/platform/login.html);
 
-Thanks for the tutorial provided by [微信公众号: Python大咖谈](https://upload-images.jianshu.io/upload_images/3240514-61004f2c71be4a0b.png);
+Thanks for the data provided by [思知网站](https://www.ownthink.com/);
+
+Thanks for the data provided by [Currencyscoop网站](https://currencyscoop.com/);
+
+Thanks for the data provided by [新加坡交易所网站](https://www.sgx.com/zh-hans/research-education/derivatives);
 
 Thanks for the tutorial provided by [微信公众号: Python大咖谈](https://upload-images.jianshu.io/upload_images/3240514-61004f2c71be4a0b.png).

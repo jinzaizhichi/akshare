@@ -843,10 +843,59 @@ amac_manager_cancelled_info # 中国证券投资基金业协会-信息公示-诚
 修复-hf_subscribe_exchange_symbol-在Linux Python 3.8.1 报错问题
 0.4.16
 修复-get_js_dc_current
+0.4.17
+新增-知识图谱
+0.4.18: fix: use tqdm replace print hints
+0.4.19: fix: use tqdm replace print hints in energy_carbon.py and charity_china.py
+0.4.20: add: jyfm_tools_position_structure and jyfm_tools_symbol_handbook
+0.4.21: fix: macro_cons_opec_month print hints
+0.4.22: fix: add tqdm desc
+0.4.23: fix: add tqdm stock_zh_a_spot desc
+0.4.24: fix: add get_us_stock_name to get the u.s. stock name
+0.4.25: fix: upload setup.py file and set automate release and deploy
+0.4.26: fix: bond_spot_quote and docs
+0.4.27: test: automate test
+0.4.28: test: automate test
+0.4.29: feats: add currency interface
+0.4.30: fix: roll_yield.py/get_roll_yield: CUefp error
+0.4.31: format: format currency.py
+0.4.32: fix: china_bond.py
+0.4.33: add: jyfm_tools_futures_arbitrage_matrix for jyfm futures
+0.4.34: fix: get_czce_rank_table history-20171228 format
+0.4.35: fix: get_czce_rank_table history-20071228 format
+0.4.36: fix: macro_cons_opec_month
+0.4.37: add: get_ine_daily to fetch SC and NR data
+0.4.38: add: futures_sgx_daily to fetch futures data from sgx
+0.4.39: refactor: sos.py/covid_19_163 interface
+0.4.40: refactor: sos.py interface
+0.4.41: fix: cot.py get_rank_sum_daily interface
+0.4.42: add: wdbank.py test
+0.4.43: add: wdbank.py dependencies
 """
 
-__version__ = "0.4.16"
+__version__ = "0.4.43"
 __author__ = "Albert King"
+
+"""
+sgx futures data
+"""
+from akshare.futures.futures_sgx_daily import futures_sgx_daily
+
+"""
+currency interface
+"""
+from akshare.currency.currency import (
+    currency_convert,
+    currency_currencies,
+    currency_history,
+    currency_latest,
+    currency_time_series,
+)
+
+"""
+知识图谱
+"""
+from akshare.nlp.nlp_interface import nlp_ownthink
 
 """
 微博舆情报告
@@ -912,11 +961,11 @@ from akshare.bond.china_repo import bond_repo_zh_tick
 新型肺炎
 """
 from akshare.event.sos import (
-    epidemic_area_search,
-    epidemic_area_all,
-    epidemic_area_detail,
-    epidemic_trip,
-    epidemic_history
+    covid_19_area_search,
+    covid_19_area_all,
+    covid_19_area_detail,
+    covid_19_trip,
+    covid_19_history,
 )
 
 """
@@ -933,12 +982,11 @@ from akshare.event.sos import migration_area_baidu, migration_scale_baidu
 新增-事件接口新型冠状病毒接口
 """
 from akshare.event.sos import (
-    epidemic_163,
-    epidemic_dxy,
-    epidemic_baidu,
-    epidemic_hist_all,
-    epidemic_hist_city,
-    epidemic_hist_province,
+    covid_19_163,
+    covid_19_dxy,
+    covid_19_baidu,
+    covid_19_hist_city,
+    covid_19_hist_province,
 )
 
 """
@@ -1008,6 +1056,11 @@ from akshare.economic.macro_bank import (
 )
 
 """
+交易法门-工具-席位分析
+"""
+from akshare.futures_derivative.jyfm_tools_func import jyfm_tools_position_structure
+
+"""
 交易法门-工具-套利分析
 """
 from akshare.futures_derivative.jyfm_tools_func import (
@@ -1016,6 +1069,7 @@ from akshare.futures_derivative.jyfm_tools_func import (
     jyfm_tools_futures_customize,
     jyfm_exchange_symbol_dict,
     jyfm_tools_futures_full_carry,
+    jyfm_tools_futures_arbitrage_matrix,
 )
 
 """
@@ -1072,6 +1126,7 @@ from akshare.futures_derivative.jyfm_tools_func import (
 from akshare.futures_derivative.jyfm_tools_func import (
     jyfm_tools_receipt_expire_info,
     jyfm_tools_position_limit_info,
+    jyfm_tools_symbol_handbook,
 )
 
 """
@@ -1362,7 +1417,7 @@ from akshare.option.option_finance import (
 """
 新浪-美股实时行情数据和历史行情数据(前复权)
 """
-from akshare.stock.us_stock_sina import stock_us_daily, stock_us_spot
+from akshare.stock.us_stock_sina import stock_us_daily, stock_us_spot, get_us_stock_name
 
 """
 新浪-港股实时行情数据和历史数据(前复权和后复权因子)

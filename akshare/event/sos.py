@@ -3,17 +3,20 @@
 """
 Author: Albert King
 date: 2020/1/23 9:07
+update_date: 2020/3/16 9:07
 contact: jindaxiang@163.com
-desc: 新增-事件接口
-新增-事件接口新型冠状病毒-网易
-新增-事件接口新型冠状病毒-丁香园
-新增-事件接口新型冠状病毒-百度
+desc: COVID-19
+新增-事件接口-新型冠状病毒-网易
+新增-事件接口-新型冠状病毒-丁香园
+新增-事件接口-新型冠状病毒-百度
+20200315 refactor the function
 """
 import json
 import time
 from io import BytesIO
 
 import demjson
+import jsonpath
 import pandas as pd
 import requests
 from PIL import Image
@@ -25,13 +28,12 @@ from akshare.event.cons import province_dict, city_dict
 # pd.set_option('display.max_columns', None)  # just for debug
 
 
-def epidemic_163(indicator="实时"):
+def covid_19_163(indicator: str = "实时") -> pd.DataFrame:
     """
-    网易网页端-新冠状病毒-实时人数统计情况
-    国内和海外
+    网易-新冠状病毒
     https://news.163.com/special/epidemic/?spssid=93326430940df93a37229666dfbc4b96&spsw=4&spss=other&#map_block
     https://news.163.com/special/epidemic/?spssid=93326430940df93a37229666dfbc4b96&spsw=4&spss=other&
-    :return: 返回国内各地区和海外地区情况
+    :return: 返回指定 indicator 的数据
     :rtype: pandas.DataFrame
     """
     url = "https://c.m.163.com/ug/api/wuhan/app/data/list-total"
@@ -43,50 +45,156 @@ def epidemic_163(indicator="实时"):
     }
     r = requests.get(url, params=payload, headers=headers)
     data_json = r.json()
-
+    # data info
     url = "https://news.163.com/special/epidemic/"
-    headers = {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36",
-    }
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "lxml")
-    data_info_df = pd.DataFrame([item.text.strip().split(".")[1] for item in
-                                 soup.find("div", attrs={"class": "data_tip_pop_text"}).find_all("p")])
+    data_info_df = pd.DataFrame(
+        [
+            item.text.strip().split(".")[1]
+            for item in soup.find("div", attrs={"class": "data_tip_pop_text"}).find_all(
+                "p"
+            )
+        ]
+    )
+    data_info_df.columns = ["info"]
 
-    hist_today_df = pd.DataFrame([item["today"] for item in data_json["data"]["chinaDayList"]],
-                                 index=[item["date"] for item in data_json["data"]["chinaDayList"]])
-    hist_total_df = pd.DataFrame([item["total"] for item in data_json["data"]["chinaDayList"]],
-                                 index=[item["date"] for item in data_json["data"]["chinaDayList"]])
+    # 中国历史时点数据
+    hist_today_df = pd.DataFrame(
+        [item["today"] for item in data_json["data"]["chinaDayList"]],
+        index=[item["date"] for item in data_json["data"]["chinaDayList"]],
+    )
 
+    # 中国历史累计数据
+    hist_total_df = pd.DataFrame(
+        [item["total"] for item in data_json["data"]["chinaDayList"]],
+        index=[item["date"] for item in data_json["data"]["chinaDayList"]],
+    )
+
+    # 中国实时数据
     current_df = pd.DataFrame.from_dict(data_json["data"]["chinaTotal"])
 
-    outside_today_df = pd.DataFrame([item["today"] for item in data_json["data"]["areaTree"]],
-                                    index=[item["name"] for item in data_json["data"]["areaTree"]])
-    outside_hist_df = pd.DataFrame([item["total"] for item in data_json["data"]["areaTree"]],
-                                   index=[item["name"] for item in data_json["data"]["areaTree"]])
+    # 世界历史时点数据
+    outside_today_df = pd.DataFrame(
+        [item["today"] for item in data_json["data"]["areaTree"]],
+        index=[item["name"] for item in data_json["data"]["areaTree"]],
+    )
 
-    province_hist_df = pd.DataFrame([item["total"] for item in data_json["data"]["areaTree"][0]["children"]],
-                                    index=[item["name"] for item in data_json["data"]["areaTree"][0]["children"]])
+    # 世界历史累计数据
+    outside_total_df = pd.DataFrame(
+        [item["total"] for item in data_json["data"]["areaTree"]],
+        index=[item["name"] for item in data_json["data"]["areaTree"]],
+    )
 
-    if indicator == "实时":
-        print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
-        return current_df
+    # 全球所有国家及地区时点数据
+    all_world_today_df = pd.DataFrame(
+        jsonpath.jsonpath(data_json["data"]["areaTree"], "$..today"),
+        index=jsonpath.jsonpath(data_json["data"]["areaTree"], "$..name"),
+    )
+
+    # 全球所有国家及地区累计数据
+    all_world_total_df = pd.DataFrame(
+        jsonpath.jsonpath(data_json["data"]["areaTree"], "$..total"),
+        index=jsonpath.jsonpath(data_json["data"]["areaTree"], "$..name"),
+    )
+
+    # 中国各地区时点数据
+    area_total_df = pd.DataFrame(
+        [item["total"] for item in data_json["data"]["areaTree"][0]["children"]],
+        index=[item["name"] for item in data_json["data"]["areaTree"][0]["children"]],
+    )
+
+    # 中国各地区累计数据
+    area_today_df = pd.DataFrame(
+        [item["today"] for item in data_json["data"]["areaTree"][0]["children"]],
+        index=[item["name"] for item in data_json["data"]["areaTree"][0]["children"]],
+    )
+
+    # 疫情学术进展
+    url_article = "https://vip.open.163.com/api/cms/topic/list"
+    payload_article = {
+        "topicid": "00019NGQ",
+        "listnum": "1000",
+        "liststart": "0",
+        "pointstart": "0",
+        "pointend": "255",
+        "useproperty": "true",
+    }
+    r_article = requests.get(url_article, params=payload_article)
+    article_df = pd.DataFrame(r_article.json()["data"]).iloc[:, 1:]
+
+    # 咨询
+    url_info = "https://ent.163.com/special/00035080/virus_report_data.js"
+    payload_info = {
+        "_": int(time.time() * 1000),
+        "callback": "callback",
+    }
+    r_info = requests.get(url_info, params=payload_info, headers=headers)
+    data_info_text = r_info.text
+    data_info_json = demjson.decode(data_info_text.strip(" callback(")[:-1])
+
     if indicator == "数据说明":
         print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
         return data_info_df
-    if indicator == "省份":
+
+    if indicator == "中国实时数据":
         print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
-        return province_hist_df
-    elif indicator == "历史":
+        return current_df
+
+    if indicator == "中国历史时点数据":
+        print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
+        return hist_today_df
+
+    if indicator == "中国历史累计数据":
         print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
         return hist_total_df
-    elif indicator == "国家":
+
+    if indicator == "世界历史时点数据":
         print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
-        return outside_hist_df
+        return outside_today_df
+
+    if indicator == "世界历史累计数据":
+        print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
+        return outside_total_df
+
+    if indicator == "全球所有国家及地区时点数据":
+        print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
+        return all_world_today_df
+
+    elif indicator == "全球所有国家及地区累计数据":
+        print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
+        return all_world_total_df
+
+    elif indicator == "中国各地区时点数据":
+        print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
+        return area_today_df
+
+    elif indicator == "中国各地区累计数据":
+        print(f"数据更新时间: {data_json['data']['lastUpdateTime']}")
+        return area_total_df
+
+    elif indicator == "疫情学术进展":
+        return article_df
+
+    elif indicator == "实时资讯新闻播报":
+        return pd.DataFrame(data_info_json["list"])
+
+    elif indicator == "实时医院新闻播报":
+        return pd.DataFrame(data_info_json["hospital"])
+
+    elif indicator == "前沿知识":
+        return pd.DataFrame(data_info_json["papers"])
+
+    elif indicator == "权威发布":
+        return pd.DataFrame(data_info_json["power"])
+
+    elif indicator == "滚动新闻":
+        return pd.DataFrame(data_info_json["scrollNews"])
 
 
-def epidemic_dxy(indicator="西藏自治区"):
+def covid_19_dxy(indicator: str = "西藏自治区") -> pd.DataFrame:
     """
+    20200315-丁香园接口更新分为国内和国外
     丁香园-全国统计-info
     丁香园-分地区统计-data
     丁香园-全国发热门诊一览表-hospital
@@ -100,40 +208,96 @@ def epidemic_dxy(indicator="西藏自治区"):
     r = requests.get(url)
     r.encoding = "utf-8"
     soup = BeautifulSoup(r.text, "lxml")
-    # news
-    text_data_news = str(soup.find_all("script", attrs={"id": "getTimelineService"}))
+    # news-china
+    text_data_news = str(
+        soup.find_all("script", attrs={"id": "getTimelineServiceundefined"})
+    )
     temp_json = text_data_news[
-                text_data_news.find("= [{") + 2: text_data_news.rfind("}catch")
-                ]
+        text_data_news.find("= [{") + 2 : text_data_news.rfind("}catch")
+    ]
     json_data = pd.DataFrame(json.loads(temp_json))
-    desc_data = json_data[
+    chinese_news = json_data[
         ["title", "summary", "infoSource", "provinceName", "sourceUrl"]
     ]
+
+    # news-foreign
+    text_data_news = str(soup.find_all("script", attrs={"id": "getTimelineService2"}))
+    temp_json = text_data_news[
+        text_data_news.find("= [{") + 2 : text_data_news.rfind("}catch")
+    ]
+    json_data = pd.DataFrame(json.loads(temp_json))
+    foreign_news = json_data
+
     # data-domestic
     data_text = str(soup.find("script", attrs={"id": "getAreaStat"}))
     data_text_json = json.loads(
-        data_text[data_text.find("= [{") + 2: data_text.rfind("catch") - 1]
+        data_text[data_text.find("= [{") + 2 : data_text.rfind("catch") - 1]
     )
+    big_df = pd.DataFrame()
+    for i, p in enumerate(jsonpath.jsonpath(data_text_json, "$..provinceName")):
+        temp_df = pd.DataFrame(jsonpath.jsonpath(data_text_json, "$..cities")[i])
+        temp_df["province"] = p
+        big_df = big_df.append(temp_df, ignore_index=True)
+    domestic_city_df = big_df
+
     data_df = pd.DataFrame(data_text_json).iloc[:, :7]
     data_df.columns = ["地区", "地区简称", "现存确诊", "累计确诊", "-", "治愈", "死亡"]
-    country_df = data_df[["地区", "地区简称", "现存确诊", "累计确诊", "治愈", "死亡"]]
+    domestic_province_df = data_df[["地区", "地区简称", "现存确诊", "累计确诊", "治愈", "死亡"]]
     # data-global
-    data_text = str(soup.find("script", attrs={"id": "getListByCountryTypeService2"}))
+    data_text = str(
+        soup.find("script", attrs={"id": "getListByCountryTypeService2true"})
+    )
     data_text_json = json.loads(
-        data_text[data_text.find("= [{") + 2: data_text.rfind("catch") - 1]
+        data_text[data_text.find("= [{") + 2 : data_text.rfind("catch") - 1]
     )
     global_df = pd.DataFrame(data_text_json)
+
     # info
     dxy_static = soup.find(attrs={"id": "getStatisticsService"}).get_text()
-    data_json = json.loads(dxy_static[dxy_static.find("= {") + 2: dxy_static.rfind("}c")])
-    info_df = pd.DataFrame([time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data_json["modifyTime"] / 1000)),
-                            data_json["currentConfirmedCount"],
-                            data_json["confirmedCount"],
-                            data_json["suspectedCount"],
-                            data_json["curedCount"],
-                            data_json["deadCount"],
-                            data_json["seriousCount"],
-                            ], index=["数据发布时间", "现存确诊", "累计确诊", "现存疑似", "治愈", "死亡", "现存重症"])
+    data_json = json.loads(
+        dxy_static[dxy_static.find("= {") + 2 : dxy_static.rfind("}c")]
+    )
+    china_statistics = pd.DataFrame(
+        [
+            time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(data_json["modifyTime"] / 1000)
+            ),
+            data_json["currentConfirmedCount"],
+            data_json["confirmedCount"],
+            data_json["suspectedCount"],
+            data_json["curedCount"],
+            data_json["deadCount"],
+            data_json["seriousCount"],
+            data_json["suspectedIncr"],
+            data_json["currentConfirmedIncr"],
+            data_json["confirmedIncr"],
+            data_json["curedIncr"],
+            data_json["deadIncr"],
+            data_json["seriousIncr"],
+        ],
+        index=[
+            "数据发布时间",
+            "现存确诊",
+            "累计确诊",
+            "境外输入",
+            "累计治愈",
+            "累计死亡",
+            "现存重症",
+            "境外输入较昨日",
+            "现存确诊较昨日",
+            "累计确诊较昨日",
+            "累计治愈较昨日",
+            "累计死亡较昨日",
+            "现存重症较昨日",
+        ],
+        columns=["info"],
+    )
+    foreign_statistics = pd.DataFrame.from_dict(
+        data_json["foreignStatistics"], orient="index"
+    )
+    global_statistics = pd.DataFrame.from_dict(
+        data_json["globalStatistics"], orient="index"
+    )
     # hospital
     url = (
         "https://assets.dxycdn.com/gitrepo/tod-assets/output/default/pneumonia/index.js"
@@ -141,79 +305,183 @@ def epidemic_dxy(indicator="西藏自治区"):
     payload = {"t": str(int(time.time()))}
     r = requests.get(url, params=payload)
     hospital_df = pd.read_html(r.text)[0].iloc[:, :-1]
-    if indicator == "全国":
-        return country_df
-    elif indicator == "global":
+
+    if indicator == "中国疫情分省统计详情":
+        return domestic_province_df
+    if indicator == "中国疫情分市统计详情":
+        return domestic_city_df
+    elif indicator == "全球疫情分国家统计详情":
         return global_df
-    elif indicator == "info":
-        return info_df
-    elif indicator == "hospital":
+    elif indicator == "中国疫情实时统计":
+        return china_statistics
+    elif indicator == "国外疫情实时统计":
+        return foreign_statistics
+    elif indicator == "全球疫情实时统计":
+        return global_statistics
+    elif indicator == "中国疫情防控医院":
         return hospital_df
-    elif indicator == "全国-疫情新增趋势图":
+    elif indicator == "实时播报":
+        return chinese_news
+
+    elif indicator == "中国-新增疑似-新增确诊-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["quanguoTrendChart"][0]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "全国-疫情疑似-确诊趋势图":
+    elif indicator == "中国-现存确诊-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["quanguoTrendChart"][1]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "全国-疫情死亡-治愈病例趋势图":
+    elif indicator == "中国-现存疑似-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["quanguoTrendChart"][2]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "全国-疫情病死率-治愈率趋势图":
+    elif indicator == "中国-治愈-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["quanguoTrendChart"][3]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "湖北-疫情新增确诊病例趋势图":
+    elif indicator == "中国-死亡-趋势图":
+        img_file = Image.open(
+            BytesIO(requests.get(data_json["quanguoTrendChart"][4]["imgUrl"]).content)
+        )
+        img_file.show()
+
+    elif indicator == "中国-非湖北新增确诊-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["hbFeiHbTrendChart"][0]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "湖北-疫情确诊趋势图":
+    elif indicator == "中国-湖北新增确诊-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["hbFeiHbTrendChart"][1]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "湖北-疫情死亡-治愈病例趋势图":
+    elif indicator == "中国-湖北现存确诊-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["hbFeiHbTrendChart"][2]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "湖北-疫情病死率趋势图":
+    elif indicator == "中国-非湖北现存确诊-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["hbFeiHbTrendChart"][3]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "湖北-疫情治愈率趋势图":
+    elif indicator == "中国-治愈-死亡-趋势图":
         img_file = Image.open(
             BytesIO(requests.get(data_json["hbFeiHbTrendChart"][4]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "疫情地图":
-        # img
-        img_url = pd.read_json(
-            dxy_static[dxy_static.find("= {") + 2: dxy_static.rfind("}catch")],
-            orient="index",
-        ).T
+
+    elif indicator == "国外-国外新增确诊-趋势图":
         img_file = Image.open(
-            BytesIO(requests.get(img_url["imgUrl"].values[0]).content)
+            BytesIO(requests.get(data_json["foreignTrendChart"][0]["imgUrl"]).content)
         )
         img_file.show()
-    elif indicator == "news":
-        return desc_data
+    elif indicator == "国外-国外累计确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(requests.get(data_json["foreignTrendChart"][1]["imgUrl"]).content)
+        )
+        img_file.show()
+    elif indicator == "国外-国外死亡-趋势图":
+        img_file = Image.open(
+            BytesIO(requests.get(data_json["foreignTrendChart"][2]["imgUrl"]).content)
+        )
+        img_file.show()
+
+    elif indicator == "国外-重点国家新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][0]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-日本新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][1]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-意大利新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][2]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-伊朗新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][3]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-美国新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][4]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-法国新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][5]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-德国新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][6]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-西班牙新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][7]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
+    elif indicator == "国外-韩国新增确诊-趋势图":
+        img_file = Image.open(
+            BytesIO(
+                requests.get(
+                    data_json["importantForeignTrendChart"][8]["imgUrl"]
+                ).content
+            )
+        )
+        img_file.show()
     else:
         try:
             data_text = str(soup.find("script", attrs={"id": "getAreaStat"}))
             data_text_json = json.loads(
-                data_text[data_text.find("= [{") + 2: data_text.rfind("catch") - 1]
+                data_text[data_text.find("= [{") + 2 : data_text.rfind("catch") - 1]
             )
             data_df = pd.DataFrame(data_text_json)
-            sub_area = pd.DataFrame(data_df[data_df["provinceName"] == indicator]["cities"].values[0])
+            sub_area = pd.DataFrame(
+                data_df[data_df["provinceName"] == indicator]["cities"].values[0]
+            )
             if sub_area.empty:
                 return print("暂无分区域数据")
             sub_area.columns = ["区域", "现在确诊人数", "确诊人数", "疑似人数", "治愈人数", "死亡人数", "id"]
@@ -223,7 +491,7 @@ def epidemic_dxy(indicator="西藏自治区"):
             print("请输入省/市的全称, 如: 浙江省/上海市 等")
 
 
-def epidemic_baidu(indicator="浙江"):
+def covid_19_baidu(indicator="浙江"):
     """
     百度-新型冠状病毒肺炎-疫情实时大数据报告
     https://voice.baidu.com/act/newpneumonia/newpneumonia/?from=osari_pc_1
@@ -253,7 +521,9 @@ def epidemic_baidu(indicator="浙江"):
     }
     r = requests.get(url, params=payload)
     text_data = r.text
-    json_data_news = json.loads(text_data.strip("/**/jsonp_1580470773343_11183(").rstrip(");"))
+    json_data_news = json.loads(
+        text_data.strip("/**/jsonp_1580470773343_11183(").rstrip(");")
+    )
 
     url = "https://opendata.baidu.com/data/inner"
     payload = {
@@ -267,27 +537,61 @@ def epidemic_baidu(indicator="浙江"):
         "cb": "jsonp_1580470773344_83572",
     }
     r = requests.get(url, params=payload)
-    json_data = json.loads(r.text[r.text.find("({") + 1:r.text.rfind(");")])
+    json_data = json.loads(r.text[r.text.find("({") + 1 : r.text.rfind(");")])
     spot_report = pd.DataFrame(json_data["Result"][0]["DisplayData"]["result"]["items"])
 
-    url = "https://mss0.bdstatic.com/se/static/act/captain/bundles/458/a6dc3abe.65e7e794.js"
+    # domestic-city
+    url = "https://voice.baidu.com/act/newpneumonia/newpneumonia/?from=osari_pc_1"
     r = requests.get(url)
-    text_data = r.text
-    json_data = demjson.decode(text_data[text_data.find('type:"object"') - 1: text_data.find('t.default=r') - 2])
-    domestic_df = pd.DataFrame.from_dict(json_data["properties"]["summaryDataIn"]["properties"], orient="index")
-    spot_df = pd.DataFrame.from_dict(json_data["properties"]["summaryDataIn"]["default"], orient="index")
-    domestic_df = pd.DataFrame.from_dict(json_data["properties"]["caseList"]["default"])
-    out_df = pd.DataFrame.from_dict(json_data["properties"]["caseOutsideList"]["default"])
+    soup = BeautifulSoup(r.text, "lxml")
+    data_json = demjson.decode(soup.find(attrs={"id": "captain-config"}).text)
 
-    temp_df = pd.DataFrame([pd.DataFrame.from_dict(json_data["properties"]["trend"]["default"]["list"])["data"][0],
-                            pd.DataFrame.from_dict(json_data["properties"]["trend"]["default"]["list"])["data"][1],
-                            pd.DataFrame.from_dict(json_data["properties"]["trend"]["default"]["list"])["data"][2],
-                            pd.DataFrame.from_dict(json_data["properties"]["trend"]["default"]["list"])["data"][3],
-                            pd.DataFrame.from_dict(json_data["properties"]["trend"]["default"]["list"])["data"][4],
-                            pd.DataFrame.from_dict(json_data["properties"]["trend"]["default"]["list"])["data"][5]],
-                           index=pd.DataFrame.from_dict(json_data["properties"]["trend"]["default"]["list"])[
-                               "name"].to_list(),
-                           columns=json_data["properties"]["trend"]["default"]["updateDate"])
+    big_df = pd.DataFrame()
+    for i, p in enumerate(
+        jsonpath.jsonpath(data_json["component"][0]["caseList"], "$..area")
+    ):
+        temp_df = pd.DataFrame(
+            jsonpath.jsonpath(data_json["component"][0]["caseList"], "$..subList")[i]
+        )
+        temp_df["province"] = p
+        big_df = big_df.append(temp_df, ignore_index=True)
+    domestic_city_df = big_df
+
+    domestic_province_df = pd.DataFrame(data_json["component"][0]["caseList"]).iloc[
+        :, :-2
+    ]
+
+    big_df = pd.DataFrame()
+    for i, p in enumerate(
+        jsonpath.jsonpath(data_json["component"][0]["caseOutsideList"], "$..area")
+    ):
+        temp_df = pd.DataFrame(
+            jsonpath.jsonpath(
+                data_json["component"][0]["caseOutsideList"], "$..subList"
+            )[i]
+        )
+        temp_df["province"] = p
+        big_df = big_df.append(temp_df, ignore_index=True)
+    outside_city_df = big_df
+
+    outside_country_df = pd.DataFrame(
+        data_json["component"][0]["caseOutsideList"]
+    ).iloc[:, :-1]
+
+    big_df = pd.DataFrame()
+    for i, p in enumerate(
+        jsonpath.jsonpath(data_json["component"][0]["globalList"], "$..area")
+    ):
+        temp_df = pd.DataFrame(
+            jsonpath.jsonpath(data_json["component"][0]["globalList"], "$..subList")[i]
+        )
+        temp_df["province"] = p
+        big_df = big_df.append(temp_df, ignore_index=True)
+    global_country_df = big_df
+
+    global_continent_df = pd.DataFrame(data_json["component"][0]["globalList"])[
+        ["area", "died", "crued", "confirmed", "confirmedRelative"]
+    ]
 
     if indicator == "热门迁入地":
         return move_in_df
@@ -301,18 +605,34 @@ def epidemic_baidu(indicator="浙江"):
         return pd.DataFrame(json_data_news["data"][0]["list"][2]["item"])
     elif indicator == "复工复课热搜":
         return pd.DataFrame(json_data_news["data"][0]["list"][3]["item"])
+    elif indicator == "热门人物榜":
+        return pd.DataFrame(json_data_news["data"][0]["list"][4]["item"])
+    elif indicator == "历史疫情热搜":
+        return pd.DataFrame(json_data_news["data"][0]["list"][5]["item"])
+    elif indicator == "搜索正能量榜":
+        return pd.DataFrame(json_data_news["data"][0]["list"][6]["item"])
+    elif indicator == "游戏榜":
+        return pd.DataFrame(json_data_news["data"][0]["list"][7]["item"])
+    elif indicator == "影视榜":
+        return pd.DataFrame(json_data_news["data"][0]["list"][8]["item"])
+    elif indicator == "小说榜":
+        return pd.DataFrame(json_data_news["data"][0]["list"][9]["item"])
+    elif indicator == "疫期飙升榜":
+        return pd.DataFrame(json_data_news["data"][0]["list"][10]["item"])
     elif indicator == "实时播报":
         return spot_report
-    elif indicator == "实时":
-        return spot_df
-    elif indicator == "历史":
-        return temp_df
-    elif indicator == "国内":
-        return domestic_df
-    elif indicator == "国外":
-        return out_df
-    else:
-        return pd.DataFrame(domestic_df[domestic_df.area == indicator]["subList"].to_list()[0])
+    elif indicator == "中国分省份详情":
+        return domestic_province_df
+    elif indicator == "中国分城市详情":
+        return domestic_city_df
+    elif indicator == "国外分国详情":
+        return outside_country_df
+    elif indicator == "国外分城市详情":
+        return outside_city_df
+    elif indicator == "全球分洲详情":
+        return global_continent_df
+    elif indicator == "全球分洲国家详情":
+        return global_country_df
 
 
 def migration_area_baidu(area="乌鲁木齐市", indicator="move_in", date="20200201"):
@@ -346,11 +666,13 @@ def migration_area_baidu(area="乌鲁木齐市", indicator="move_in", date="2020
         "date": date,
     }
     r = requests.get(url, params=payload)
-    json_data = json.loads(r.text[r.text.find("({") + 1:r.text.rfind(");")])
+    json_data = json.loads(r.text[r.text.find("({") + 1 : r.text.rfind(");")])
     return pd.DataFrame(json_data["data"]["list"])
 
 
-def migration_scale_baidu(area="乌鲁木齐市", indicator="move_out", start_date="20190112", end_date="20200201"):
+def migration_scale_baidu(
+    area="乌鲁木齐市", indicator="move_out", start_date="20190112", end_date="20200201"
+):
     """
     百度地图慧眼-百度迁徙-迁徙规模
     * 迁徙规模指数：反映迁入或迁出人口规模，城市间可横向对比
@@ -382,14 +704,14 @@ def migration_scale_baidu(area="乌鲁木齐市", indicator="move_out", start_da
         "endDate": end_date,
     }
     r = requests.get(url, params=payload)
-    json_data = json.loads(r.text[r.text.find("({") + 1:r.text.rfind(");")])
+    json_data = json.loads(r.text[r.text.find("({") + 1 : r.text.rfind(");")])
     temp_df = pd.DataFrame.from_dict(json_data["data"]["list"], orient="index")
     temp_df.index = pd.to_datetime(temp_df.index)
     temp_df.columns = ["迁徙规模指数"]
     return temp_df
 
 
-def epidemic_area_search(province="四川省", city="成都市", district="高新区"):
+def covid_19_area_search(province="四川省", city="成都市", district="高新区"):
     """
     省份-城市-区-数据查询
     https://ncov.html5.qq.com/community?channelid=1&from=singlemessage&isappinstalled=0
@@ -412,10 +734,19 @@ def epidemic_area_search(province="四川省", city="成都市", district="高�
     }
     r = requests.get(url, params=payload)
     temp_df = pd.DataFrame(r.json()["community"][province][city][district])
-    return temp_df[["province", "city", "district", "show_address", "full_address", "cnt_sum_certain"]]
+    return temp_df[
+        [
+            "province",
+            "city",
+            "district",
+            "show_address",
+            "full_address",
+            "cnt_sum_certain",
+        ]
+    ]
 
 
-def epidemic_area_all():
+def covid_19_area_all():
     """
     可以获取数据的全国所有省份-城市-区域数据
     https://ncov.html5.qq.com/community?channelid=1&from=singlemessage&isappinstalled=0
@@ -429,12 +760,19 @@ def epidemic_area_all():
     temp = []
     for p in province_list:
         for c in area[p].keys():
-            temp.extend(list(zip([p] * len(list(area[p][c].keys())[1:]), [c] * len(list(area[p][c].keys())[1:]),
-                                 list(area[p][c].keys())[1:])))
+            temp.extend(
+                list(
+                    zip(
+                        [p] * len(list(area[p][c].keys())[1:]),
+                        [c] * len(list(area[p][c].keys())[1:]),
+                        list(area[p][c].keys())[1:],
+                    )
+                )
+            )
     return pd.DataFrame(temp, columns=["province", "city", "district"])
 
 
-def epidemic_area_detail():
+def covid_19_area_detail():
     """
     细化到每个小区的确诊人数
     需要遍历每个页面, 如非必要, 请勿运行
@@ -443,15 +781,17 @@ def epidemic_area_detail():
     :rtype: pandas.DataFrame
     """
     temp_df = pd.DataFrame()
-    area_df = epidemic_area_all()
+    area_df = covid_19_area_all()
     for item in area_df.iterrows():
         print(f"一共{area_df.shape[0]}, 正在下载第{item[0] + 1}页")
-        small_df = epidemic_area_search(province=item[1][0], city=item[1][1], district=item[1][2])
+        small_df = covid_19_area_search(
+            province=item[1][0], city=item[1][1], district=item[1][2]
+        )
         temp_df = temp_df.append(small_df, ignore_index=True)
     return temp_df
 
 
-def epidemic_trip():
+def covid_19_trip():
     """
     新型肺炎确诊患者-相同行程查询工具
     https://rl.inews.qq.com/h5/trip?from=newsapp&ADTAG=tgi.wx.share.message
@@ -463,23 +803,7 @@ def epidemic_trip():
     return pd.DataFrame(r.json()["data"]["list"])
 
 
-def epidemic_hist_all() -> pd.DataFrame:
-    """
-    返回丁香园的数据
-    该接口最好用代理速度比较快
-    https://github.com/canghailan/Wuhan-2019-nCoV
-    2019-12-01开始
-    :return:
-    :rtype: pandas.DataFrame
-    """
-    url = "https://raw.githubusercontent.com/canghailan/Wuhan-2019-nCoV/master/Wuhan-2019-nCoV.json"
-    r = requests.get(url)
-    data_json = r.json()
-    data_df = pd.DataFrame(data_json)
-    return data_df
-
-
-def epidemic_hist_city(city: str = "武汉市") -> pd.DataFrame:
+def covid_19_hist_city(city: str = "武汉市") -> pd.DataFrame:
     """
     该接口最好用代理速度比较快
     https://github.com/canghailan/Wuhan-2019-nCoV
@@ -494,12 +818,12 @@ def epidemic_hist_city(city: str = "武汉市") -> pd.DataFrame:
     return data_df[data_df["city"] == city]
 
 
-def epidemic_hist_province(province: str = "湖北省") -> pd.DataFrame:
+def covid_19_hist_province(province: str = "湖北省") -> pd.DataFrame:
     """
     该接口最好用代理速度比较快
     https://github.com/canghailan/Wuhan-2019-nCoV
     2019-12-01开始
-    :return:
+    :return: 具体省份的疫情数据
     :rtype: pandas.DataFrame
     """
     url = "https://raw.githubusercontent.com/canghailan/Wuhan-2019-nCoV/master/Wuhan-2019-nCoV.json"
@@ -509,7 +833,7 @@ def epidemic_hist_province(province: str = "湖北省") -> pd.DataFrame:
     return data_df[data_df["province"] == province]
 
 
-def epidemic_history() -> pd.DataFrame:
+def covid_19_history() -> pd.DataFrame:
     """
     该接口最好用代理速度比较快
     https://github.com/canghailan/Wuhan-2019-nCoV
@@ -526,88 +850,122 @@ def epidemic_history() -> pd.DataFrame:
 
 if __name__ == "__main__":
     # 163
-    epidemic_current_163_df = epidemic_163(indicator="实时")
-    print(epidemic_current_163_df)
-    epidemic_info_163_df = epidemic_163(indicator="数据说明")
-    print(epidemic_info_163_df)
-    epidemic_hist_163_df = epidemic_163(indicator="省份")
-    print(epidemic_hist_163_df)
-    epidemic_area_163_df = epidemic_163(indicator="历史")
-    print(epidemic_area_163_df)
-    epidemic_outside_163_df = epidemic_163(indicator="国家")
-    print(epidemic_outside_163_df)
+    indicator_list = [
+        "数据说明",
+        "中国实时数据",
+        "中国历史时点数据",
+        "中国历史累计数据",
+        "世界历史时点数据",
+        "世界历史累计数据",
+        "全球所有国家及地区时点数据",
+        "全球所有国家及地区累计数据",
+        "中国各地区时点数据",
+        "中国各地区累计数据",
+        "疫情学术进展",
+        "实时资讯新闻播报",
+        "实时医院新闻播报",
+        "前沿知识",
+        "权威发布",
+        "滚动新闻",
+    ]
+    for item in indicator_list:
+        covip_19_163_df = covid_19_163(indicator=item)
+        print(covip_19_163_df)
+
     # dxy
-    epidemic_dxy_country_df = epidemic_dxy(indicator="全国")
-    print(epidemic_dxy_country_df)
-    epidemic_dxy_global_df = epidemic_dxy(indicator="global")
-    print(epidemic_dxy_global_df)
-    epidemic_dxy_province_df = epidemic_dxy(indicator="浙江省")
-    print(epidemic_dxy_province_df)
-    epidemic_dxy_info_df = epidemic_dxy(indicator="info")
-    print(epidemic_dxy_info_df)
-    epidemic_dxy_hospital_df = epidemic_dxy(indicator="hospital")
-    print(epidemic_dxy_hospital_df)
-    epidemic_dxy_news_df = epidemic_dxy(indicator="news")
-    print(epidemic_dxy_news_df)
-    epidemic_dxy(indicator="全国-疫情新增趋势图")
-    epidemic_dxy(indicator="全国-疫情疑似-确诊趋势图")
-    epidemic_dxy(indicator="全国-疫情新增死亡-治愈病例趋势图")
-    epidemic_dxy(indicator="全国-疫情死亡-治愈病例趋势图")
-    epidemic_dxy(indicator="全国-疫情病死率-治愈率趋势图")
-    epidemic_dxy(indicator="湖北-疫情新增确诊病例趋势图")
-    epidemic_dxy(indicator="湖北-疫情确诊趋势图")
-    epidemic_dxy(indicator="湖北-疫情死亡-治愈病例趋势图")
-    epidemic_dxy(indicator="湖北-疫情病死率趋势图")
-    epidemic_dxy(indicator="湖北-疫情治愈率趋势图")
-    epidemic_dxy(indicator="疫情地图")
+    indicator_list = [
+        "中国疫情分省统计详情",
+        "中国疫情分市统计详情",
+        "全球疫情分国家统计详情",
+        "中国疫情实时统计",
+        "国外疫情实时统计",
+        "全球疫情实时统计",
+        "中国疫情防控医院",
+        "实时播报",
+        "中国-新增疑似-新增确诊-趋势图",
+        "中国-现存确诊-趋势图",
+        "中国-现存疑似-趋势图",
+        "中国-治愈-趋势图",
+        "中国-死亡-趋势图",
+        "中国-非湖北新增确诊-趋势图",
+        "中国-湖北新增确诊-趋势图",
+        "中国-湖北现存确诊-趋势图",
+        "中国-非湖北现存确诊-趋势图",
+        "中国-治愈-死亡-趋势图",
+        "国外-国外新增确诊-趋势图",
+        "国外-国外累计确诊-趋势图",
+        "国外-国外死亡-趋势图",
+        "国外-重点国家新增确诊-趋势图",
+        "国外-日本新增确诊-趋势图",
+        "国外-意大利新增确诊-趋势图",
+        "国外-伊朗新增确诊-趋势图",
+        "国外-美国新增确诊-趋势图",
+        "国外-法国新增确诊-趋势图",
+        "国外-德国新增确诊-趋势图",
+        "国外-西班牙新增确诊-趋势图",
+        "国外-韩国新增确诊-趋势图",
+        "浙江省",
+    ]
+    for item in indicator_list:
+        covid_19_dxy_df = covid_19_dxy(indicator=item)
+        print(covid_19_dxy_df)
+
     # baidu
-    epidemic_baidu_rmqrd_df = epidemic_baidu(indicator="热门迁入地")
-    print(epidemic_baidu_rmqrd_df)
-    epidemic_baidu_rmqcd_df = epidemic_baidu(indicator="热门迁出地")
-    print(epidemic_baidu_rmqcd_df)
-    epidemic_baidu_jryqrs_df = epidemic_baidu(indicator="今日疫情热搜")
-    print(epidemic_baidu_jryqrs_df)
-    epidemic_baidu_fyzsrs_df = epidemic_baidu(indicator="防疫知识热搜")
-    print(epidemic_baidu_fyzsrs_df)
-    epidemic_baidu_rsyyfs_df = epidemic_baidu(indicator="热搜谣言粉碎")
-    print(epidemic_baidu_rsyyfs_df)
-    epidemic_baidu_ssbb_df = epidemic_baidu(indicator="实时播报")
-    print(epidemic_baidu_ssbb_df)
-    epidemic_baidu_ls_df = epidemic_baidu(indicator="历史")
-    print(epidemic_baidu_ls_df)
-    epidemic_baidu_gn_df = epidemic_baidu(indicator="国内")
-    print(epidemic_baidu_gn_df)
-    epidemic_baidu_gw_df = epidemic_baidu(indicator="国外")
-    print(epidemic_baidu_gw_df)
-    epidemic_baidu_zj_df = epidemic_baidu(indicator="浙江")
-    print(epidemic_baidu_zj_df)
+    indicator_list = [
+        "热门迁入地",
+        "热门迁出地",
+        "今日疫情热搜",
+        "防疫知识热搜",
+        "热搜谣言粉碎",
+        "复工复课热搜",
+        "热门人物榜",
+        "历史疫情热搜",
+        "搜索正能量榜",
+        "游戏榜",
+        "影视榜",
+        "小说榜",
+        "疫期飙升榜",
+        "实时播报",
+        "中国分省份详情",
+        "中国分城市详情",
+        "国外分国详情",
+        "国外分城市详情",
+        "全球分洲详情",
+        "全球分洲国家详情",
+    ]
+    for item in indicator_list:
+        covid_19_baidu_df = covid_19_baidu(indicator=item)
+        print(covid_19_baidu_df)
+
     # 迁徙地图
-    migration_area_baidu_df = migration_area_baidu(area="上海市", indicator="move_in", date="20200212")
+    migration_area_baidu_df = migration_area_baidu(
+        area="上海市", indicator="move_in", date="20200212"
+    )
     # print(migration_area_baidu_df.to_csv("迁入上海市来源地-20200218.csv", encoding="gb2312"))
     print(migration_area_baidu_df)
-    migration_scale_baidu_df = migration_scale_baidu(area="上海市", indicator="move_in", start_date="20190113",
-                                                     end_date="20200212")
+    migration_scale_baidu_df = migration_scale_baidu(
+        area="上海市", indicator="move_in", start_date="20190113", end_date="20200212"
+    )
     # print(migration_scale_baidu_df.to_csv("迁入上海市2019-2020统计-20200218.csv", encoding="gb2312"))
     print(migration_scale_baidu_df)
     # 小区
-    epidemic_area_search_df = epidemic_area_search(province="四川省", city="成都市", district="高新区")
+    epidemic_area_search_df = covid_19_area_search(
+        province="四川省", city="成都市", district="高新区"
+    )
     print(epidemic_area_search_df)
-    epidemic_area_all_df = epidemic_area_all()
+    epidemic_area_all_df = covid_19_area_all()
     print(epidemic_area_all_df)
     # epidemic_area_detail_df = epidemic_area_detail()
     # print(epidemic_area_detail_df)
     # print(epidemic_area_detail_df.to_csv("所有疫情地点-20200218.csv", encoding="gbk"))
     # 行程
-    epidemic_trip_df = epidemic_trip()
+    epidemic_trip_df = covid_19_trip()
     print(epidemic_trip_df)
     # 历史数据
-    epidemic_hist_all_df = epidemic_hist_all()
-    print(epidemic_hist_all_df)
-    epidemic_hist_city_df = epidemic_hist_city(city="武汉市")
+    epidemic_hist_city_df = covid_19_hist_city(city="武汉市")
     print(epidemic_hist_city_df)
-    epidemic_hist_province_df = epidemic_hist_province(province="湖北省")
+    epidemic_hist_province_df = covid_19_hist_province(province="湖北省")
     print(epidemic_hist_province_df)
     # 详细历史数据
-    epidemic_history_df = epidemic_history()
+    epidemic_history_df = covid_19_history()
     print(epidemic_history_df)
-
